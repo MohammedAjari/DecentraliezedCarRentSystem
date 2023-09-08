@@ -18,6 +18,7 @@ contract carRent{
     event DebugValues(uint, uint,uint);
     event rentExtended(uint _id,address _renter,uint _noofDays,uint _avalaibleAfter);
     uint carCounter;
+    uint voteCounter;
     // We create the array to store the names of the customers so that we can give some discount to them in future.
     address[] public regularCustomers;
     // The below mapping will store the list of the cars 
@@ -35,6 +36,10 @@ contract carRent{
     modifier ExceptOwner(){
         require(msg.sender != owner , "Owner can't do this action");
         _;
+    }
+
+    function getContractBalance()public view onlyOwner returns(uint) {
+        return address(this).balance;
     }
 
     function compareStrings(string memory a, string memory b) internal pure returns (bool) {
@@ -56,8 +61,9 @@ contract carRent{
     } 
 
     function checkCarDetails(uint _id) public view returns(carDetails memory){
-        require(_id >= 0 && _id <= carCounter , "Enter valid id");
-        return (carList[_id]);
+        carDetails memory cd = carList[_id];
+        require(_id >= 0 && _id < carCounter , "Enter valid id");
+        return cd;
     }
     
     
@@ -68,11 +74,10 @@ contract carRent{
         require(cd.currentRenter == msg.sender , "Only current renter can do rent extension functionality");
         // The below line ensures that the rent can be only extended if the rent time has not ended
         require(block.timestamp < cd.avalaibleAfter , "You have to rent the car again, You can't do this at current time");
-        address payable carOwner = payable(owner);
+        //address payable carOwner = payable(owner);
         uint totalRent = (cd.rentPrice * _noofDays);
         require(msg.value >= totalRent, "Please provide complete rent");
-        carOwner.transfer(msg.value);
-        emit amountTransferred(carOwner, totalRent);
+        emit amountTransferred(address(this), totalRent);
         uint unrentedAfter = cd.avalaibleAfter + (_noofDays * 1 days);
         cd.avalaibleAfter = unrentedAfter;
         emit rentExtended(_id, msg.sender, _noofDays, unrentedAfter);
@@ -80,6 +85,7 @@ contract carRent{
 
     function bookCar(uint _id , uint _noOfDays) public payable ExceptOwner{
         // This function is used to book the car
+        require(_id < carCounter, "Enter valid ID");
         require(checkCarAvailabilty(_id) , "Car is already rented");
         carDetails storage cd = carList[_id];
         require(_noOfDays > 0 , "Enter valid days value");
@@ -88,15 +94,32 @@ contract carRent{
         uint unrentedAfter = block.timestamp + (_noOfDays * 1 days);
         // Ensure that the amount sent is at least equal to the total rent
         require(msg.value >= totalRent, "Please provide complete rent");
-        address payable carOwner = payable(owner);
+        //address payable carOwner = payable(owner);
         emit DebugValues(_noOfDays, cd.rentPrice, msg.value);
-        carOwner.transfer(msg.value);
-        emit amountTransferred(carOwner , totalRent);
+        //carOwner.transfer(msg.value);
+        emit amountTransferred(address(this) , totalRent);
         cd.currentRenter = msg.sender;
         cd.isRented = true;
         cd.totalRenters +=  1;
         cd.avalaibleAfter = unrentedAfter;
         emit carBooked(_id , msg.sender,_noOfDays , unrentedAfter);
+    }
+
+    function rentCompleted(uint _id,bool _answer) public {
+        carDetails storage cd = carList[_id];
+        require(msg.sender == owner || msg.sender == cd.currentRenter , "Only owner and current renter can do this functionality");
+        if(_answer){
+            voteCounter++;
+        }
+        if(voteCounter == 2){
+            transferAmount(  address(this).balance);
+        }
+    }
+
+    function transferAmount(uint _amount) public payable {
+        address payable carOwner = payable(owner);
+        carOwner.transfer(_amount);
+        emit amountTransferred(carOwner,_amount);
     }
 
 }
